@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <title>Standing Rock Stewardship Co. | Lake Property Watch & Monitoring — Lake Eufaula, OK</title>
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <meta name="description" content="Standing Rock Stewardship Co. — Lake Eufaula property monitoring and stewardship platform" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Architects+Daughter&family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Fira+Code:wght@300..700&family=Geist+Mono:wght@100..900&family=Geist:wght@100..900&family=IBM+Plex+Mono:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Lora:ital,wght@0,400..700;1,400..700&family=Merriweather:ital,opsz,wght@0,18..144,300..900;1,18..144,300..900&family=Montserrat:ital,wght@0,100..900;1,100..900&family=Open+Sans:ital,wght@0,300..800;1,300..800&family=Outfit:wght@100..900&family=Oxanium:wght@200..800&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&family=Roboto+Mono:ital,wght@0,100..700;1,100..700&family=Roboto:ital,wght@0,100..900;1,100..900&family=Source+Code+Pro:ital,wght@0,200..900;1,200..900&family=Source+Serif+4:ital,opsz,wght@0,8..60,200..900;1,8..60,200..900&family=Space+Grotesk:wght@300..700&family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- ─── SRSC Cold-Start Spinner & Fetch Interceptor ─────────────────────── -->
+    <style>
+      #srsc-spinner{
+        display:none;
+        position:fixed;inset:0;z-index:9999;
+        background:rgba(28,28,28,.82);
+        flex-direction:column;align-items:center;justify-content:center;
+        gap:20px;
+        font-family:'Playfair Display',Georgia,serif;
+      }
+      #srsc-spinner.active{display:flex;}
+      #srsc-spinner-ring{
+        width:56px;height:56px;
+        border:5px solid rgba(245,240,234,.18);
+        border-top-color:#C05A43;
+        border-radius:50%;
+        animation:srsc-spin .9s linear infinite;
+      }
+      #srsc-spinner-msg{
+        color:#F5F0EA;
+        font-size:1.1rem;
+        letter-spacing:.03em;
+        text-align:center;
+        max-width:280px;
+        line-height:1.5;
+      }
+      #srsc-spinner-sub{
+        color:#7A8C6E;
+        font-family:'Source Sans 3',sans-serif;
+        font-size:.88rem;
+        text-align:center;
+        max-width:260px;
+      }
+      @keyframes srsc-spin{to{transform:rotate(360deg);}}
+    </style>
+
+    <script>
+      // ── Configuration ──────────────────────────────────────────────────────
+      const SRSC_API = "https://srsc-backend.onrender.com";
+      // Threshold (ms) before showing the cold-start notice
+      const SLOW_THRESHOLD = 4000;
+
+      // ── Spinner helpers ────────────────────────────────────────────────────
+      let _activeRequests = 0;
+      let _slowTimer = null;
+
+      function srscShowSpinner(msg, sub) {
+        const el = document.getElementById("srsc-spinner");
+        if (!el) return;
+        document.getElementById("srsc-spinner-msg").textContent = msg || "Connecting…";
+        document.getElementById("srsc-spinner-sub").textContent = sub || "";
+        el.classList.add("active");
+      }
+      function srscHideSpinner() {
+        const el = document.getElementById("srsc-spinner");
+        if (el) el.classList.remove("active");
+        if (_slowTimer) { clearTimeout(_slowTimer); _slowTimer = null; }
+      }
+
+      // ── Fetch interceptor — watches calls to the Render backend only ───────
+      const _nativeFetch = window.fetch.bind(window);
+      window.fetch = function(input, init) {
+        const url = (typeof input === "string") ? input : (input && input.url) || "";
+        if (!url.startsWith(SRSC_API)) return _nativeFetch(input, init);
+
+        _activeRequests++;
+
+        // Start slow-request timer
+        _slowTimer = setTimeout(() => {
+          srscShowSpinner(
+            "Waking up the server…",
+            "Our server powers down when idle. First connection takes up to 60 seconds — hang tight."
+          );
+        }, SLOW_THRESHOLD);
+
+        return _nativeFetch(input, init)
+          .then(res => {
+            _activeRequests--;
+            if (_activeRequests <= 0) srscHideSpinner();
+            return res;
+          })
+          .catch(err => {
+            _activeRequests--;
+            if (_activeRequests <= 0) srscHideSpinner();
+            // Surface a friendly network error via a custom event the React app can optionally listen to
+            window.dispatchEvent(new CustomEvent("srsc:networkerror", { detail: err }));
+            throw err;
+          });
+      };
+
+      // ── Global network-error fallback toast ───────────────────────────────
+      window.addEventListener("srsc:networkerror", () => {
+        const toast = document.createElement("div");
+        Object.assign(toast.style, {
+          position:"fixed", bottom:"24px", left:"50%", transform:"translateX(-50%)",
+          background:"#1C1C1C", color:"#F5F0EA", border:"1px solid #C05A43",
+          borderRadius:"8px", padding:"14px 24px", fontFamily:"'Source Sans 3',sans-serif",
+          fontSize:"0.95rem", zIndex:"10000", maxWidth:"340px", textAlign:"center",
+          boxShadow:"0 4px 24px rgba(0,0,0,.45)"
+        });
+        toast.textContent = "Unable to reach the server. Please check your connection and try again.";
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 6000);
+      });
+    </script>
+    <!-- ──────────────────────────────────────────────────────────────────────── -->
+
+    <script type="module" crossorigin src="./assets/index-DV7JY9YQ.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-D_kVV4-i.css">
+  </head>
+  <body>
+
+    <!-- Cold-start spinner overlay -->
+    <div id="srsc-spinner" role="status" aria-live="polite">
+      <div id="srsc-spinner-ring"></div>
+      <div id="srsc-spinner-msg">Connecting…</div>
+      <div id="srsc-spinner-sub"></div>
+    </div>
+
+    <div id="root"></div>
+  </body>
+</html>
