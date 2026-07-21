@@ -1,31 +1,47 @@
 (function(){
   var API='https://srsc-backend.onrender.com';
-  function getToken(){
-    var keys=['token','srsc_token','authToken','jwt'];
-    for(var i=0;i<keys.length;i++){
-      var v=localStorage.getItem(keys[i])||sessionStorage.getItem(keys[i]);
-      if(v&&v.split('.').length===3)return v;
-    }
+  var TOKEN_KEY='srsc_token';
+  var USER_KEY='srsc_user';
+
+  function saveAuth(token,user){
     try{
-      for(var s=0;s<localStorage.length;s++){
-        var k=localStorage.key(s);var val=localStorage.getItem(k);
-        if(val&&val.split&&val.split('.').length===3&&val.length>20)return val;
-        if(val){try{var parsed=JSON.parse(val);if(parsed&&parsed.token)return parsed.token;if(parsed&&parsed.state&&parsed.state.token)return parsed.state.token;}catch(e){}}
-      }
-      for(var s2=0;s2<sessionStorage.length;s2++){
-        var k2=sessionStorage.key(s2);var val2=sessionStorage.getItem(k2);
-        if(val2&&val2.split&&val2.split('.').length===3&&val2.length>20)return val2;
-        if(val2){try{var parsed2=JSON.parse(val2);if(parsed2&&parsed2.token)return parsed2.token;if(parsed2&&parsed2.state&&parsed2.state.token)return parsed2.state.token;}catch(e){}}
-      }
+      if(token)sessionStorage.setItem(TOKEN_KEY,token);
+      if(user)sessionStorage.setItem(USER_KEY,JSON.stringify(user));
     }catch(e){}
-    return null;
   }
-  function dumpStorage(){
-    var out=[];
-    try{for(var s=0;s<localStorage.length;s++){var k=localStorage.key(s);out.push('local:'+k+' = '+String(localStorage.getItem(k)).slice(0,200));}}catch(e){}
-    try{for(var s2=0;s2<sessionStorage.length;s2++){var k2=sessionStorage.key(s2);out.push('session:'+k2+' = '+String(sessionStorage.getItem(k2)).slice(0,200));}}catch(e){}
-    return out.join('\n')||'(empty)';
+
+  function getToken(){
+    try{return sessionStorage.getItem(TOKEN_KEY);}catch(e){return null;}
   }
+
+  function getUser(){
+    try{var u=sessionStorage.getItem(USER_KEY);return u?JSON.parse(u):null;}catch(e){return null;}
+  }
+
+  function hasAccess(){
+    var u=getUser();
+    return !!(u&&(u.role==='admin'||u.role==='field_tech'));
+  }
+
+  // Intercept fetch globally to capture the login response token/user
+  var _origFetch=window.fetch;
+  window.fetch=function(input,init){
+    var url=typeof input==='string'?input:(input&&input.url)||'';
+    return _origFetch.apply(this,arguments).then(function(res){
+      try{
+        if(url.indexOf('/api/auth/login')!==-1&&res && res.ok){
+          res.clone().json().then(function(data){
+            if(data&&data.token){
+              saveAuth(data.token,data.user);
+              renderFab();
+            }
+          }).catch(function(e){});
+        }
+      }catch(e){}
+      return res;
+    });
+  };
+
   function authFetch(path){
     var t=getToken();
     return fetch(API+path,{headers:t?{'Authorization':'Bearer '+t}:{}}).then(function(r){
@@ -35,12 +51,14 @@
       });
     });
   }
+
   function el(tag,attrs,html){
     var e=document.createElement(tag);
     if(attrs)for(var k in attrs)e.setAttribute(k,attrs[k]);
     if(html!==undefined)e.innerHTML=html;
     return e;
   }
+
   var overlay=null;
   function closeOverlay(){
     if(overlay&&overlay.parentNode){overlay.parentNode.removeChild(overlay);}
@@ -61,18 +79,21 @@
     document.body.appendChild(overlay);
     return body;
   }
+
   function asArray(x){
     if(Array.isArray(x))return x;
     if(x&&Array.isArray(x.rows))return x.rows;
     if(x&&Array.isArray(x.data))return x.data;
     return [];
   }
+
   function showDebug(){
-    var t=getToken();
+    var t=getToken();var u=getUser();
     var html='<p><b>Token found:</b> '+(t?('yes, len='+t.length):'no')+'</p>';
-    html+='<pre style="white-space:pre-wrap;font-size:12px;background:#f5f5f5;padding:12px;border-radius:6px;">'+dumpStorage().replace(/</g,'&lt;')+'</pre>';
+    html+='<p><b>User:</b> '+(u?JSON.stringify(u):'(none)')+'</p>';
     openOverlay('Debug Storage',html);
   }
+
   function showCalendar(){
     var body=openOverlay('Calendar','<p>Loading...</p>');
     authFetch('/api/calendar').then(function(d){
@@ -86,6 +107,7 @@
       if(body)body.innerHTML=html;
     }).catch(function(e){if(body)body.innerHTML='<p>Error loading calendar: '+e.message+'</p>';});
   }
+
   function showVisits(){
     var body=openOverlay('Scheduled Visits','<p>Loading...</p>');
     authFetch('/api/scheduled-visits').then(function(d){
@@ -95,6 +117,7 @@
       if(body)body.innerHTML=html;
     }).catch(function(e){if(body)body.innerHTML='<p>Error loading visits: '+e.message+'</p>';});
   }
+
   function showLaunchCrew(){
     var body=openOverlay('Launch Crew Tasks','<p>Loading...</p>');
     authFetch('/api/launch-crew-tasks').then(function(d){
@@ -104,7 +127,14 @@
       if(body)body.innerHTML=html;
     }).catch(function(e){if(body)body.innerHTML='<p>Error loading tasks: '+e.message+'</p>';});
   }
-  function addFab(){
+
+  function removeFab(){
+    var f=document.getElementById('srsc-fab');
+    if(f&&f.parentNode)f.parentNode.removeChild(f);
+  }
+
+  function renderFab(){
+    if(!hasAccess()){removeFab();return;}
     if(document.getElementById('srsc-fab'))return;
     var fab=el('div',{id:'srsc-fab',style:'position:fixed;bottom:24px;right:24px;z-index:9998;display:flex;flex-direction:column;align-items:flex-end;gap:8px;font-family:sans-serif;'});
     var menu=el('div',{id:'srsc-fab-menu',style:'display:none;flex-direction:column;gap:6px;margin-bottom:8px;'});
@@ -123,7 +153,12 @@
     fab.appendChild(toggle);
     document.body.appendChild(fab);
   }
-  function init(){addFab();}
+
+  function init(){
+    renderFab();
+    // Re-check periodically in case login happens after initial load, or user logs out
+    setInterval(renderFab,2000);
+  }
   if(document.readyState==='complete'||document.readyState==='interactive'){init();}
   else{document.addEventListener('DOMContentLoaded',init);}
   setTimeout(init,1000);
