@@ -10,10 +10,21 @@
       for(var s=0;s<localStorage.length;s++){
         var k=localStorage.key(s);var val=localStorage.getItem(k);
         if(val&&val.split&&val.split('.').length===3&&val.length>20)return val;
-        if(val){try{var parsed=JSON.parse(val);if(parsed&&parsed.token)return parsed.token;}catch(e){}}
+        if(val){try{var parsed=JSON.parse(val);if(parsed&&parsed.token)return parsed.token;if(parsed&&parsed.state&&parsed.state.token)return parsed.state.token;}catch(e){}}
+      }
+      for(var s2=0;s2<sessionStorage.length;s2++){
+        var k2=sessionStorage.key(s2);var val2=sessionStorage.getItem(k2);
+        if(val2&&val2.split&&val2.split('.').length===3&&val2.length>20)return val2;
+        if(val2){try{var parsed2=JSON.parse(val2);if(parsed2&&parsed2.token)return parsed2.token;if(parsed2&&parsed2.state&&parsed2.state.token)return parsed2.state.token;}catch(e){}}
       }
     }catch(e){}
     return null;
+  }
+  function dumpStorage(){
+    var out=[];
+    try{for(var s=0;s<localStorage.length;s++){var k=localStorage.key(s);out.push('local:'+k+' = '+String(localStorage.getItem(k)).slice(0,200));}}catch(e){}
+    try{for(var s2=0;s2<sessionStorage.length;s2++){var k2=sessionStorage.key(s2);out.push('session:'+k2+' = '+String(sessionStorage.getItem(k2)).slice(0,200));}}catch(e){}
+    return out.join('\n')||'(empty)';
   }
   function authFetch(path){
     var t=getToken();
@@ -55,6 +66,12 @@
     if(x&&Array.isArray(x.rows))return x.rows;
     if(x&&Array.isArray(x.data))return x.data;
     return [];
+  }
+  function showDebug(){
+    var t=getToken();
+    var html='<p><b>Token found:</b> '+(t?('yes, len='+t.length):'no')+'</p>';
+    html+='<pre style="white-space:pre-wrap;font-size:12px;background:#f5f5f5;padding:12px;border-radius:6px;">'+dumpStorage().replace(/</g,'&lt;')+'</pre>';
+    openOverlay('Debug Storage',html);
   }
   function showCalendar(){
     var body=openOverlay('Calendar','<p>Loading...</p>');
@@ -99,6 +116,7 @@
     menu.appendChild(mkBtn('Calendar',showCalendar));
     menu.appendChild(mkBtn('Scheduled Visits',showVisits));
     menu.appendChild(mkBtn('Launch Crew Tasks',showLaunchCrew));
+    menu.appendChild(mkBtn('Debug Storage',showDebug));
     var toggle=el('button',{style:'background:#1C1C1C;color:#fff;border:none;width:56px;height:56px;border-radius:50%;cursor:pointer;font-size:24px;box-shadow:0 2px 8px rgba(0,0,0,0.3);'},'+');
     toggle.addEventListener('click',function(){menu.style.display=menu.style.display==='none'?'flex':'none';});
     fab.appendChild(menu);
