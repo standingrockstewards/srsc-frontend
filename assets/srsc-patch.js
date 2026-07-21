@@ -17,7 +17,12 @@
   }
   function authFetch(path){
     var t=getToken();
-    return fetch(API+path,{headers:t?{'Authorization':'Bearer '+t}:{}}).then(function(r){return r.json();});
+    return fetch(API+path,{headers:t?{'Authorization':'Bearer '+t}:{}}).then(function(r){
+      return r.json().then(function(j){
+        if(!r.ok){var msg=(j&&j.error)?j.error:('HTTP '+r.status);throw new Error(msg);}
+        return j;
+      });
+    });
   }
   function el(tag,attrs,html){
     var e=document.createElement(tag);
@@ -45,28 +50,40 @@
     document.body.appendChild(overlay);
     return body;
   }
+  function asArray(x){
+    if(Array.isArray(x))return x;
+    if(x&&Array.isArray(x.rows))return x.rows;
+    if(x&&Array.isArray(x.data))return x.data;
+    return [];
+  }
   function showCalendar(){
-    var body=openOverlay('Calendar',"<p>Loading...</p>");
+    var body=openOverlay('Calendar','<p>Loading...</p>');
     authFetch('/api/calendar').then(function(d){
-      var html='<h3 style="margin-top:12px;">Visits</h3><ul>'+(d.visits||[]).map(function(v){return '<li>'+(v.date||'')+' \u2014 '+(v.type||'')+' \u2014 '+(v.status||'')+'</li>';}).join('')+'</ul>';
-      html+='<h3 style="margin-top:12px;">Launch Crew Tasks</h3><ul>'+(d.tasks||[]).map(function(v){return '<li>'+(v.date||'')+' \u2014 '+(v.type||'')+' \u2014 '+(v.status||'')+'</li>';}).join('')+'</ul>';
-      html+='<h3 style="margin-top:12px;">Weather Alerts</h3><ul>'+(d.alerts||[]).map(function(v){return '<li>'+(v.date||'')+' \u2014 '+(v.type||'')+' \u2014 '+(v.notes||'')+'</li>';}).join('')+'</ul>';
+      var visits=asArray(d.visits),tasks=asArray(d.tasks),alerts=asArray(d.alerts);
+      var html='<h3 style="margin-top:12px;">Visits</h3><ul>'+visits.map(function(v){return '<li>'+(v.date||'')+' \u2014 '+(v.type||'')+' \u2014 '+(v.status||'')+'</li>';}).join('')+'</ul>';
+      if(!visits.length)html+='<p style="color:#888;">None</p>';
+      html+='<h3 style="margin-top:12px;">Launch Crew Tasks</h3><ul>'+tasks.map(function(v){return '<li>'+(v.date||'')+' \u2014 '+(v.type||'')+' \u2014 '+(v.status||'')+'</li>';}).join('')+'</ul>';
+      if(!tasks.length)html+='<p style="color:#888;">None</p>';
+      html+='<h3 style="margin-top:12px;">Weather Alerts</h3><ul>'+alerts.map(function(v){return '<li>'+(v.date||'')+' \u2014 '+(v.type||'')+' \u2014 '+(v.notes||'')+'</li>';}).join('')+'</ul>';
+      if(!alerts.length)html+='<p style="color:#888;">None</p>';
       if(body)body.innerHTML=html;
     }).catch(function(e){if(body)body.innerHTML='<p>Error loading calendar: '+e.message+'</p>';});
   }
   function showVisits(){
     var body=openOverlay('Scheduled Visits','<p>Loading...</p>');
-    authFetch('/api/scheduled-visits').then(function(rows){
-      var html='<ul>'+(rows||[]).map(function(v){return '<li>'+(v.property_name||'Property #'+v.property_id)+' \u2014 '+v.scheduled_date+' \u2014 '+v.status+'</li>';}).join('')+'</ul>';
-      if(!rows||!rows.length)html='<p>No scheduled visits yet.</p>';
+    authFetch('/api/scheduled-visits').then(function(d){
+      var rows=asArray(d);
+      var html='<ul>'+rows.map(function(v){return '<li>'+(v.property_name||'Property #'+v.property_id)+' \u2014 '+v.scheduled_date+' \u2014 '+v.status+'</li>';}).join('')+'</ul>';
+      if(!rows.length)html='<p>No scheduled visits yet.</p>';
       if(body)body.innerHTML=html;
     }).catch(function(e){if(body)body.innerHTML='<p>Error loading visits: '+e.message+'</p>';});
   }
   function showLaunchCrew(){
     var body=openOverlay('Launch Crew Tasks','<p>Loading...</p>');
-    authFetch('/api/launch-crew-tasks').then(function(rows){
-      var html='<ul>'+(rows||[]).map(function(v){return '<li>'+(v.property_name||'Property #'+v.property_id)+' \u2014 '+v.task_type+' \u2014 '+v.status+' (due '+v.due_date+')</li>';}).join('')+'</ul>';
-      if(!rows||!rows.length)html='<p>No launch crew tasks yet.</p>';
+    authFetch('/api/launch-crew-tasks').then(function(d){
+      var rows=asArray(d);
+      var html='<ul>'+rows.map(function(v){return '<li>'+(v.property_name||'Property #'+v.property_id)+' \u2014 '+v.task_type+' \u2014 '+v.status+' (due '+v.due_date+')</li>';}).join('')+'</ul>';
+      if(!rows.length)html='<p>No launch crew tasks yet.</p>';
       if(body)body.innerHTML=html;
     }).catch(function(e){if(body)body.innerHTML='<p>Error loading tasks: '+e.message+'</p>';});
   }
